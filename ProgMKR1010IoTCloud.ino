@@ -1,4 +1,5 @@
 //Libraries
+#include "arduino_secrets.h"
 #include <Arduino.h> 
 #include <SPI.h>
 #include <WiFiNINA.h>
@@ -39,14 +40,14 @@ void setup() {
     Serial.print("WiFi shield not present");
     while (true);
   }
-
+  //Test
   //Attempt to connect to WiFi network
   while (status != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named : ");
-    Serial.println(ssid);
+    Serial.println(SSID);
 
     //Connect to WPA/WPA2 network
-    status = WiFi.begin(ssid, pass);
+    status = WiFi.begin(SSID, PASS);
     //Wait 10 seconds for connection
     delay(10000);
   }
