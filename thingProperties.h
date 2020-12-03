@@ -6,7 +6,7 @@
 const char SSID[] = SECRET_SSID;    // Network SSID (name)
 const char PASS[] = SECRET_PASS;    // Network password (use for WPA, or use as key for WEP)
 
-float distance;
+float temperature;
 
 //BeerTap On counter
 int timeElapsedinSec;
@@ -22,7 +22,7 @@ float tempDiff;
 
 void initProperties() {
   ArduinoCloud.setThingId(THING_ID);
-  ArduinoCloud.addProperty(distance, READ, ON_CHANGE, NULL, 0.1);
+  ArduinoCloud.addProperty(temperature, READ, ON_CHANGE, NULL, 0);
   ArduinoCloud.addProperty(timeElapsedinHou, READ, ON_CHANGE, NULL, 0);
   ArduinoCloud.addProperty(timeElapsedinDay, READ, ON_CHANGE, NULL, 0);
   ArduinoCloud.addProperty(resetCpt, READWRITE, ON_CHANGE);

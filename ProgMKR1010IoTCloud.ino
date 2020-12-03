@@ -6,10 +6,27 @@
 #include <BlynkSimpleWiFiNINA.h>
 #include "thingProperties.h"
 #include <HCSR04.h>
+#include <Thermistor.h>
+#include <NTC_Thermistor.h>
+#include <AverageThermistor.h>
+       
+#define SENSOR_PIN             A1
+#define REFERENCE_RESISTANCE   24000
+#define NOMINAL_RESISTANCE     10000
+#define NOMINAL_TEMPERATURE    25
+#define B_VALUE                3950
+/**
+  How many readings are taken to determine a mean temperature.
+  The more values, the longer a calibration is performed,
+  but the readings will be more accurate.
+*/
+#define READINGS_NUMBER 200
 
-//Distance sensor
-const int trigPin = 2;
-const int echoPin = 3;
+/**
+  Delay time between a temperature readings
+  from the temperature sensor (ms).
+*/
+#define DELAY_TIME 10
 
 //Temperature threshole
 int tempThreshole = 4;
@@ -21,13 +38,10 @@ char serverifttt[] = "maker.ifttt.com";
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
-UltraSonicDistanceSensor distanceSensor(trigPin, echoPin);
 BlynkTimer timer;
 bool canPushNotification = false;
 
-float voltage;
-int ADCValue;
-float resistance;
+Thermistor* thermistor = NULL;
 
 void setup() {
   Serial.begin(9600);
@@ -64,22 +78,59 @@ void setup() {
   setDebugMessageLevel(DBG_INFO);
   ArduinoCloud.printDebugInfo();
 
+  thermistor = new AverageThermistor(
+      new NTC_Thermistor(
+      SENSOR_PIN,
+      REFERENCE_RESISTANCE,
+      NOMINAL_RESISTANCE,
+      NOMINAL_TEMPERATURE,
+      B_VALUE
+    ),
+    READINGS_NUMBER,
+    DELAY_TIME
+  );
+
   timer.setInterval(1000L, beerTapOnCpt); 
 }
 
 void loop() {
   ArduinoCloud.update();
   timer.run();        // run timer every second
-  ADCValue = analogRead(A0);
-  voltage = ADCValue * (12 / 1023);
-  Serial.println(voltage);
-  if ((distance < tempThreshole) && canPushNotification) {
+  // int average;
+  // int samples[NUMSAMPLES];
+
+  //   // take N samples in a row, with a slight delay
+  // for (int i=0; i< NUMSAMPLES; i++) {
+  //   samples[i] = analogRead(A1);
+  // }
+  
+  // // average all the samples out
+  // average = 0;
+  // for (int i=0; i< NUMSAMPLES; i++) {
+  //    average += samples[i];
+  // }
+  // average /= NUMSAMPLES;
+
+  // voltage = average * (5.0 / 1023.0);
+  // resistance = (voltage*SERIESRESISTOR)/(12-voltage);
+
+  // temperature = average / THERMISTORNOMINAL;     // (R/Ro)
+  // temperature = log(temperature);                  // ln(R/Ro)
+  // temperature /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
+  // temperature += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
+  // temperature = 1.0 / temperature;                 // Invert
+  // temperature -= 273.15;                         // convert absolute temp to °C
+
+  temperature = thermistor->readCelsius();
+
+  if ((temperature < tempThreshole) && canPushNotification) {
      iftttSend(tempThreshole);
      canPushNotification = false;
   }
-  if (distance > (tempThreshole + tempDiff)){
+  if (temperature > (tempThreshole + tempDiff)){
     canPushNotification = true;
   }
+  Serial.println(temperature);
 }
 
 void printWifiStatus() {
@@ -124,7 +175,7 @@ void iftttSend(int val) {
 
 void beerTapOnCpt(){
   bool beerTapOn = digitalRead(6);
-  
+
   if (beerTapOn && !resetCpt){
     timeElapsedinSec += 1;
     if (timeElapsedinSec == 60){
@@ -146,4 +197,8 @@ void beerTapOnCpt(){
     timeElapsedinHou = 0;
     timeElapsedinDay = 0;
   }
+}
+
+float temperatureCalcul(){
+  
 }
