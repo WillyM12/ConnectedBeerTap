@@ -28,8 +28,8 @@
 */
 #define DELAY_TIME 10
 
-//Temperature threshole
-int tempThreshole = 4;
+//Temperature differential which allow pushing alarm
+#define DIFFERENTIAL 1
 
 //IFTTT
 WiFiSSLClient client;
@@ -96,38 +96,15 @@ void setup() {
 void loop() {
   ArduinoCloud.update();
   timer.run();        // run timer every second
-  // int average;
-  // int samples[NUMSAMPLES];
 
-  //   // take N samples in a row, with a slight delay
-  // for (int i=0; i< NUMSAMPLES; i++) {
-  //   samples[i] = analogRead(A1);
-  // }
-  
-  // // average all the samples out
-  // average = 0;
-  // for (int i=0; i< NUMSAMPLES; i++) {
-  //    average += samples[i];
-  // }
-  // average /= NUMSAMPLES;
-
-  // voltage = average * (5.0 / 1023.0);
-  // resistance = (voltage*SERIESRESISTOR)/(12-voltage);
-
-  // temperature = average / THERMISTORNOMINAL;     // (R/Ro)
-  // temperature = log(temperature);                  // ln(R/Ro)
-  // temperature /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
-  // temperature += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
-  // temperature = 1.0 / temperature;                 // Invert
-  // temperature -= 273.15;                         // convert absolute temp to °C
-
+  //Steinhart relation
   temperature = thermistor->readCelsius();
 
   if ((temperature < tempThreshole) && canPushNotification) {
      iftttSend(tempThreshole);
      canPushNotification = false;
   }
-  if (temperature > (tempThreshole + tempDiff)){
+  if (temperature > (tempThreshole + DIFFERENTIAL)){
     canPushNotification = true;
   }
   Serial.println(temperature);
@@ -154,12 +131,12 @@ void iftttSend(int val) {
   String str_val = String(val);
   Serial.println("Alarm triggered ! Distance value is up to: " + str_val);
   String data = "{\"value1\":\"" + str_val + "\"}";
-  // Connexion au serveur IFTTT
+  // Serveur IFTTT connection
   Serial.println("Starting connection to server...");
   if (client.connectSSL(serverifttt, 443)) {
     Serial.println("Connected to server IFTTT, ready to trigger alarm...");
     // Make a HTTP request:
-    client.println("POST /trigger/BeerTap/with/key/dlBLq2tfIELgiTqr9EWK9h/ HTTP/1.1"); // Replace  by your own IFTTT key
+    client.println("POST /trigger/BeerTap/with/key/dlBLq2tfIELgiTqr9EWK9h/ HTTP/1.1");
     client.println("Host: maker.ifttt.com");
     client.println("Content-Type: application/json");
     client.print("Content-Length: ");
