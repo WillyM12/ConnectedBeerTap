@@ -18,7 +18,7 @@ int timeElapsedinDay;
 bool resetCpt;
 
 //Temperature differential
-float tempThreshole;
+float tempThreshold;
 
 void initProperties() {
   ArduinoCloud.setThingId(THING_ID);
@@ -26,7 +26,7 @@ void initProperties() {
   ArduinoCloud.addProperty(timeElapsedinHou, READ, ON_CHANGE, NULL, 0);
   ArduinoCloud.addProperty(timeElapsedinDay, READ, ON_CHANGE, NULL, 0);
   ArduinoCloud.addProperty(resetCpt, READWRITE, ON_CHANGE);
-  ArduinoCloud.addProperty(tempThreshole, READWRITE, ON_CHANGE);
+  ArduinoCloud.addProperty(tempThreshold, READWRITE, ON_CHANGE);
 }
 
 WiFiConnectionHandler ArduinoIoTPreferredConnection(SSID,PASS);

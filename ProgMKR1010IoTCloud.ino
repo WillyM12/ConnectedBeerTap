@@ -1,14 +1,18 @@
 //Libraries
 #include "arduino_secrets.h"
+#include "thingProperties.h"
 #include <Arduino.h> 
 #include <SPI.h>
 #include <WiFiNINA.h>
 #include <BlynkSimpleWiFiNINA.h>
-#include "thingProperties.h"
-#include <HCSR04.h>
-#include <Thermistor.h>
 #include <NTC_Thermistor.h>
 #include <AverageThermistor.h>
+#include <LiquidCrystal_I2C.h>
+
+#define BEERTAPSTATE_PIN       0
+#define BUTTONLEFT_PIN         1
+#define BUTTONVALID_PIN        2
+#define BUTTONRIGHT_PIN        3
        
 #define SENSOR_PIN             A1
 #define REFERENCE_RESISTANCE   24000
@@ -28,27 +32,75 @@
 */
 #define DELAY_TIME 10
 
-//Temperature differential which allow pushing alarm
-#define DIFFERENTIAL 1
+//Temperature differential which allow pushing notification
+float differential=1.0;
 
 //IFTTT
 WiFiSSLClient client;
 char serverifttt[] = "maker.ifttt.com";
 
+//Wifi connection
 int status = WL_IDLE_STATUS;
 WiFiServer server(80);
 
+//Blynk interruption
 BlynkTimer timer;
-bool canPushNotification = false;
 
+//LCD logos
+uint8_t bell[8]  = {0x4, 0xe, 0xe, 0xe, 0x1f, 0x0, 0x4};
+uint8_t empty[8]  = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+uint8_t clock[8] = {0x0, 0xe, 0x15, 0x17, 0x11, 0xe, 0x0};
+byte degree[8] = {
+  B01110,
+  B10001,
+  B10001,
+  B10001,
+  B01110,
+  B00000,
+  B00000,
+};
+uint8_t duck[8]  = {0x0, 0xc, 0x1d, 0xf, 0xf, 0x6, 0x0};
+uint8_t check[8] = {0x0, 0x1 ,0x3, 0x16, 0x1c, 0x8, 0x0};
+uint8_t cross[8] = {0x0, 0x1b, 0xe, 0x4, 0xe, 0x1b, 0x0};
+uint8_t retarrow[8] = {0x1, 0x1, 0x5, 0x9, 0x1f, 0x8, 0x4};
+
+//Initialization
+int step = 0;
+bool canPushNotification = false;
 Thermistor* thermistor = NULL;
+LiquidCrystal_I2C lcd(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
+bool buttonLeft = 0;
+bool buttonLeftMem = 0;
+bool buttonLeftFM = 0;
+bool buttonRight = 0;
+bool buttonRightMem = 0;
+bool buttonRightFM = 0;
+bool buttonValid = 0;
+bool buttonValidMem = 0;
+bool buttonValidFM= 0;
+
 
 void setup() {
   Serial.begin(9600);
   delay(1500); 
+  pinMode(BEERTAPSTATE_PIN, INPUT);
+  pinMode(BUTTONLEFT_PIN, INPUT_PULLUP);
+  pinMode(BUTTONVALID_PIN, INPUT_PULLUP);
+  pinMode(BUTTONRIGHT_PIN, INPUT_PULLUP);
 
-  pinMode(6, INPUT);
-  
+  //LCD display
+  lcd.init();
+  lcd.setBacklight(HIGH);
+
+  lcd.createChar(0, bell);
+	lcd.createChar(1, empty);
+	lcd.createChar(2, clock);
+	lcd.createChar(3, degree);
+	lcd.createChar(4, duck);
+	lcd.createChar(5, check);
+	lcd.createChar(6, cross);
+	lcd.createChar(7, retarrow);
+
   //Check the wifi connection
   if (WiFi.status() == WL_NO_SHIELD) {
     Serial.print("WiFi shield not present");
@@ -96,18 +148,71 @@ void setup() {
 void loop() {
   ArduinoCloud.update();
   timer.run();        // run timer every second
+  lcd.clear();
+
+  //Détection des fronts montant
+  buttonLeft = digitalRead(BUTTONLEFT_PIN);
+  ((buttonLeft != buttonLeftMem) && (buttonLeft==HIGH)) ? buttonLeftFM=true : buttonLeftFM=false;
+  buttonLeftMem = buttonLeft;
+
+  buttonRight = digitalRead(BUTTONRIGHT_PIN);
+  ((buttonRight != buttonRightMem) && (buttonRight==HIGH)) ? buttonRightFM=true : buttonRightFM=false;
+  buttonRightMem = buttonRight;
+
+  buttonValid = digitalRead(BUTTONVALID_PIN);
+  ((buttonValid != buttonValidMem) && (buttonValid==HIGH)) ? buttonValidFM=true : buttonValidFM=false;
+  buttonValidMem = buttonValid;
 
   //Steinhart relation
   temperature = thermistor->readCelsius();
 
-  if ((temperature < tempThreshole) && canPushNotification) {
-     iftttSend(tempThreshole);
+  //Notification
+  if ((temperature < tempThreshold) && canPushNotification) {
+     iftttSend(tempThreshold);
      canPushNotification = false;
   }
-  if (temperature > (tempThreshole + DIFFERENTIAL)){
+  if (temperature > (tempThreshold + differential)){
     canPushNotification = true;
   }
   Serial.println(temperature);
+
+  //Temperature differential and threshold control
+  if (buttonValidFM){
+    step += 1;
+  }
+  if (step > 1 ){
+    step = 0;
+  }
+  //State machine
+  switch (step)
+  {
+  case 0:
+    lcd.setCursor(15,0);
+    lcd.write(7);
+    lcd.setCursor(15,1);
+    lcd.write(1);
+    if(buttonLeftFM){
+      differential -= 0.1;
+    }
+    if(buttonRightFM){
+      differential += 0.1;
+    }
+    break;
+  case 1:
+    lcd.setCursor(15,1);
+    lcd.write(7);
+    lcd.setCursor(15,0);
+    lcd.write(1);
+    if(buttonLeftFM){
+      tempThreshold -= 0.1;
+    }
+    if(buttonRightFM){
+      tempThreshold += 0.1;
+    }
+    break;
+  } 
+
+lcdDisplay();
 }
 
 void printWifiStatus() {
@@ -129,7 +234,7 @@ void printWifiStatus() {
 
 void iftttSend(int val) {
   String str_val = String(val);
-  Serial.println("Alarm triggered ! Distance value is up to: " + str_val);
+  Serial.println("Alarm triggered ! Temperaure value is less than : " + str_val);
   String data = "{\"value1\":\"" + str_val + "\"}";
   // Serveur IFTTT connection
   Serial.println("Starting connection to server...");
@@ -151,7 +256,7 @@ void iftttSend(int val) {
 }
 
 void beerTapOnCpt(){
-  bool beerTapOn = digitalRead(6);
+  bool beerTapOn = digitalRead(BEERTAPSTATE_PIN);
 
   if (beerTapOn && !resetCpt){
     timeElapsedinSec += 1;
@@ -176,6 +281,37 @@ void beerTapOnCpt(){
   }
 }
 
-float temperatureCalcul(){
-  
+void lcdDisplay(){
+    char bufferTemp[6];
+    char bufferTime[9];
+    char bufferDif[6];
+    char bufferNotif[6];
+
+    //Temperature display
+    sprintf(bufferTemp,"%d.%d", (int)temperature, (int)(temperature*10)%10); 
+    lcd.setCursor(0,0);
+    lcd.print(bufferTemp);
+    lcd.setCursor(4,0);
+    lcd.write(3);
+    lcd.setCursor(5,0);
+    lcd.print("C");
+
+    //Time display
+    sprintf(bufferTime,"%dJ%dh%dm",timeElapsedinDay,timeElapsedinHou,timeElapsedinMin);
+    lcd.setCursor(0,1);
+    lcd.print(bufferTime);
+
+    //Differential display
+    sprintf(bufferDif,"<%d.%d>", (int)differential, (int)(differential*10)%10);
+    lcd.setCursor(9,0);
+    lcd.write(4);
+    lcd.setCursor(10,0);
+    lcd.print(bufferDif);
+
+    //Temeprature threshold display
+    sprintf(bufferNotif,"<%d.%d>", (int)tempThreshold, (int)(tempThreshold*10)%10);
+    lcd.setCursor(9,1);
+    lcd.write(0);
+    lcd.setCursor(10,1);
+    lcd.print(bufferNotif);
 }
