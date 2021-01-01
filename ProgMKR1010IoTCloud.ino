@@ -7,7 +7,8 @@
 #include <BlynkSimpleWiFiNINA.h>
 #include <NTC_Thermistor.h>
 #include <AverageThermistor.h>
-#include <LiquidCrystal_I2C.h>
+#include "Wire.h"
+#include "Adafruit_LiquidCrystal.h"
 
 #define BEERTAPSTATE_PIN       0
 #define BUTTONLEFT_PIN         1
@@ -50,15 +51,7 @@ BlynkTimer timer;
 uint8_t bell[8]  = {0x4, 0xe, 0xe, 0xe, 0x1f, 0x0, 0x4};
 uint8_t empty[8]  = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 uint8_t clock[8] = {0x0, 0xe, 0x15, 0x17, 0x11, 0xe, 0x0};
-byte degree[8] = {
-  B01110,
-  B10001,
-  B10001,
-  B10001,
-  B01110,
-  B00000,
-  B00000,
-};
+uint8_t degree[8] = {0xe, 0x11, 0x11, 0x11, 0xe, 0x0, 0x0};
 uint8_t duck[8]  = {0x0, 0xc, 0x1d, 0xf, 0xf, 0x6, 0x0};
 uint8_t check[8] = {0x0, 0x1 ,0x3, 0x16, 0x1c, 0x8, 0x0};
 uint8_t cross[8] = {0x0, 0x1b, 0xe, 0x4, 0xe, 0x1b, 0x0};
@@ -68,7 +61,6 @@ uint8_t retarrow[8] = {0x1, 0x1, 0x5, 0x9, 0x1f, 0x8, 0x4};
 int step = 0;
 bool canPushNotification = false;
 Thermistor* thermistor = NULL;
-LiquidCrystal_I2C lcd(0x27,16,2);  // set the LCD address to 0x27 for a 16 chars and 2 line display
 bool buttonLeft = 0;
 bool buttonLeftMem = 0;
 bool buttonLeftFM = 0;
@@ -79,17 +71,19 @@ bool buttonValid = 0;
 bool buttonValidMem = 0;
 bool buttonValidFM= 0;
 
+// Connect via i2c, default address #0 (A0-A2 not jumpered)
+Adafruit_LiquidCrystal lcd(0);
 
 void setup() {
   Serial.begin(9600);
   delay(1500); 
+  lcd.begin(16, 2);
   pinMode(BEERTAPSTATE_PIN, INPUT);
   pinMode(BUTTONLEFT_PIN, INPUT_PULLUP);
   pinMode(BUTTONVALID_PIN, INPUT_PULLUP);
   pinMode(BUTTONRIGHT_PIN, INPUT_PULLUP);
 
   //LCD display
-  lcd.init();
   lcd.setBacklight(HIGH);
 
   lcd.createChar(0, bell);
@@ -148,7 +142,6 @@ void setup() {
 void loop() {
   ArduinoCloud.update();
   timer.run();        // run timer every second
-  lcd.clear();
 
   //Détection des fronts montant
   buttonLeft = digitalRead(BUTTONLEFT_PIN);
