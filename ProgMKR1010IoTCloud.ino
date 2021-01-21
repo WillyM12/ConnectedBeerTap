@@ -7,25 +7,28 @@
 #include <BlynkSimpleWiFiNINA.h>
 #include <NTC_Thermistor.h>
 #include <AverageThermistor.h>
-#include "Wire.h"
-#include "Adafruit_LiquidCrystal.h"
+#include "LiquidCrystal_I2C.h"
 
 #define BEERTAPSTATE_PIN       0
 #define BUTTONLEFT_PIN         1
 #define BUTTONVALID_PIN        2
 #define BUTTONRIGHT_PIN        3
        
-#define SENSOR_PIN             A1
+#define SENSOR_PIN             A0
 #define REFERENCE_RESISTANCE   24000
 #define NOMINAL_RESISTANCE     10000
 #define NOMINAL_TEMPERATURE    25
 #define B_VALUE                3950
+
+#define BATTERYLIFE_PIN        A1
+#define MAXVOLTAGE             4.2
+#define MINVOLTAGE             3.2
 /**
   How many readings are taken to determine a mean temperature.
   The more values, the longer a calibration is performed,
   but the readings will be more accurate.
 */
-#define READINGS_NUMBER 200
+#define READINGS_NUMBER 50
 
 /**
   Delay time between a temperature readings
@@ -35,6 +38,9 @@
 
 //Temperature differential which allow pushing notification
 float differential=1.0;
+
+//Battery percent
+float percentBatteryLife;
 
 //IFTTT
 WiFiSSLClient client;
@@ -72,18 +78,20 @@ bool buttonValidMem = 0;
 bool buttonValidFM= 0;
 
 // Connect via i2c, default address #0 (A0-A2 not jumpered)
-Adafruit_LiquidCrystal lcd(0);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 void setup() {
   Serial.begin(9600);
   delay(1500); 
-  lcd.begin(16, 2);
+
   pinMode(BEERTAPSTATE_PIN, INPUT);
   pinMode(BUTTONLEFT_PIN, INPUT_PULLUP);
   pinMode(BUTTONVALID_PIN, INPUT_PULLUP);
   pinMode(BUTTONRIGHT_PIN, INPUT_PULLUP);
+  //analogReference(AR_EXTERNAL);
 
   //LCD display
+  lcd.init();
   lcd.setBacklight(HIGH);
 
   lcd.createChar(0, bell);
@@ -94,6 +102,8 @@ void setup() {
 	lcd.createChar(5, check);
 	lcd.createChar(6, cross);
 	lcd.createChar(7, retarrow);
+  lcd.setCursor(0,0);
+  lcd.print("Chargement...");
 
   //Check the wifi connection
   if (WiFi.status() == WL_NO_SHIELD) {
@@ -136,14 +146,32 @@ void setup() {
     DELAY_TIME
   );
 
-  timer.setInterval(1000L, beerTapOnCpt); 
+  timer.setInterval(1000L, beerTapOnCpt);
+  lcd.clear();
 }
 
 void loop() {
   ArduinoCloud.update();
   timer.run();        // run timer every second
 
-  //Détection des fronts montant
+  //Battery life
+  float batteryPercent = analogRead(BATTERYLIFE_PIN);
+  int minValue = (1023 * MINVOLTAGE) / 5;
+  int maxValue = (1023 * MAXVOLTAGE) / 5;
+
+  batteryPercent = ((batteryPercent - minValue) / (maxValue - minValue)) * 100;
+
+  if(batteryPercent > 99){
+    percentBatteryLife = 99;
+  }
+  else if(batteryPercent < 0){
+    percentBatteryLife = 0;
+  }
+  else{
+    percentBatteryLife = batteryPercent;
+  }
+
+  //Rising edge detection
   buttonLeft = digitalRead(BUTTONLEFT_PIN);
   ((buttonLeft != buttonLeftMem) && (buttonLeft==HIGH)) ? buttonLeftFM=true : buttonLeftFM=false;
   buttonLeftMem = buttonLeft;
@@ -167,7 +195,6 @@ void loop() {
   if (temperature > (tempThreshold + differential)){
     canPushNotification = true;
   }
-  Serial.println(temperature);
 
   //Temperature differential and threshold control
   if (buttonValidFM){
@@ -227,7 +254,7 @@ void printWifiStatus() {
 
 void iftttSend(int val) {
   String str_val = String(val);
-  Serial.println("Alarm triggered ! Temperaure value is less than : " + str_val);
+  Serial.println("Alarm triggered ! Temperature value is less than : " + str_val);
   String data = "{\"value1\":\"" + str_val + "\"}";
   // Serveur IFTTT connection
   Serial.println("Starting connection to server...");
@@ -279,14 +306,15 @@ void lcdDisplay(){
     char bufferTime[9];
     char bufferDif[6];
     char bufferNotif[6];
+    char bufferBattery[4];
 
     //Temperature display
     sprintf(bufferTemp,"%d.%d", (int)temperature, (int)(temperature*10)%10); 
-    lcd.setCursor(0,0);
-    lcd.print(bufferTemp);
     lcd.setCursor(4,0);
+    lcd.print(bufferTemp);
+    lcd.setCursor(7,0);
     lcd.write(3);
-    lcd.setCursor(5,0);
+    lcd.setCursor(8,0);
     lcd.print("C");
 
     //Time display
@@ -307,4 +335,9 @@ void lcdDisplay(){
     lcd.write(0);
     lcd.setCursor(10,1);
     lcd.print(bufferNotif);
+
+    //Battery life display
+    sprintf(bufferBattery,"%d%%", (int)percentBatteryLife);
+    lcd.setCursor(0,0);
+    lcd.print(bufferBattery);
 }
